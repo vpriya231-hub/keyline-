@@ -3,6 +3,7 @@ import { ViewState, User } from "./types";
 import LandingView from "./components/LandingView";
 import AuthView from "./components/AuthView";
 import DashboardView from "./components/DashboardView";
+import VideoSplash from "./components/VideoSplash";
 import { Loader2 } from "lucide-react";
 
 export default function App() {
@@ -10,6 +11,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
 
   // Core app state startup check
   useEffect(() => {
@@ -83,6 +85,10 @@ export default function App() {
         <span className="font-mono text-xs tracking-widest text-zinc-500 uppercase">Synchronizing Keyline Security Keys...</span>
       </div>
     );
+  }
+
+  if (showSplash) {
+    return <VideoSplash onFinish={() => setShowSplash(false)} />;
   }
 
   // Render view router
