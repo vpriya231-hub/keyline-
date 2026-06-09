@@ -23,7 +23,7 @@ try {
       if (stat.isDirectory()) {
         const found = findMp4File(fullPath);
         if (found) return found;
-      } else if (file.toLowerCase().endsWith(".mp4") || file.includes("video_20260609")) {
+      } else if (file.toLowerCase().endsWith(".mp4") || file.includes("1000386695") || file.includes("video_20260609")) {
         return fullPath;
       }
     }
@@ -31,11 +31,14 @@ try {
   };
 
   const detectedVideo = findMp4File(process.cwd());
-  const targetPublicPath = path.join(process.cwd(), "public", "video_20260609_175149.mp4");
+  const targetPublicPath = path.join(process.cwd(), "public", "1000386695.mp4");
 
   if (detectedVideo && detectedVideo !== targetPublicPath) {
     console.log(`[VIDEO SERVICE] Auto-copying detected video from ${detectedVideo} to ${targetPublicPath}`);
     fs.copyFileSync(detectedVideo, targetPublicPath);
+    // Also copy to original placeholder name for compatibility if needed
+    const oldTarget = path.join(process.cwd(), "public", "video_20260609_175149.mp4");
+    fs.copyFileSync(detectedVideo, oldTarget);
   } else if (!detectedVideo) {
     console.log("[VIDEO SERVICE] No source .mp4 file detected yet outside of public/.");
   }
@@ -77,12 +80,14 @@ try {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  // 15b. HIGH QUALITY VIDEO SERVING ENDPOINT (Supports range-requests out-of-the-box via res.sendFile)
-  app.get("/video_20260609_175149.mp4", (req, res) => {
+  // 15b. HIGH QUALITY VIDEO SERVING ENDPOINTS (Supports range-requests out-of-the-box via res.sendFile)
+  const handleVideoResponse = (req: any, res: any, targetName: string) => {
     const pathsToSearch = [
+      path.join(process.cwd(), "public", targetName),
+      path.join(process.cwd(), targetName),
+      path.join(process.cwd(), "assets", targetName),
       path.join(process.cwd(), "public", "video_20260609_175149.mp4"),
       path.join(process.cwd(), "video_20260609_175149.mp4"),
-      path.join(process.cwd(), "assets", "video_20260609_175149.mp4"),
     ];
 
     for (const p of pathsToSearch) {
@@ -102,7 +107,7 @@ try {
           if (stat.isDirectory()) {
             const found = findMp4(fullPath);
             if (found) return found;
-          } else if (file.toLowerCase().endsWith(".mp4") || file.includes("video_20260609")) {
+          } else if (file.toLowerCase().endsWith(".mp4") || file.includes("1000386695") || file.includes("video_20260609")) {
             return fullPath;
           }
         }
@@ -118,8 +123,16 @@ try {
       return res.sendFile(foundPath);
     }
 
-    console.error("[VIDEO SERVICE] Could not find the requested .mp4 file anywhere in the workspace.");
-    res.status(404).send("Cinematic intro video asset not loaded yet");
+    console.error("[VIDEO SERVICE] Could not find any suitable video file in the workspace.");
+    res.status(404).send("Cinematic intro video asset not found");
+  };
+
+  app.get("/1000386695.mp4", (req, res) => {
+    handleVideoResponse(req, res, "1000386695.mp4");
+  });
+
+  app.get("/video_20260609_175149.mp4", (req, res) => {
+    handleVideoResponse(req, res, "video_20260609_175149.mp4");
   });
 
   // 2. SIGN UP ENDPOINT
