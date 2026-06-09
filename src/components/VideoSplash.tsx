@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Volume2, VolumeX, SkipForward, Sparkles, Key, ShieldCheck, Cpu, Database, Activity, RefreshCw } from "lucide-react";
+import { Volume2, VolumeX, SkipForward, Sparkles, Key, Loader2 } from "lucide-react";
 
 interface VideoSplashProps {
   onFinish: () => void;
@@ -10,26 +10,13 @@ export default function VideoSplash({ onFinish }: VideoSplashProps) {
   const [progress, setProgress] = useState(0);
   const [isFading, setIsFading] = useState(false);
   const [videoState, setVideoState] = useState<"loading" | "playing" | "error">("loading");
-  const [currentLogIndex, setCurrentLogIndex] = useState(0);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Security Simulation system logs for the fallback screen
-  const logs = [
-    "INITIALIZING KEYLINE IDENTITY CORE...",
-    "HANDSHAKING WITH AUTHENTICATION GATEWAYS...",
-    "CREATING SECURE HARDWARE SECURITY ENCLAVE...",
-    "CALIBRATING DISCRETE KEY VECTORS...",
-    "VERIFYING SESSION DECRYPTION MATRIX...",
-    "ESTABLISHING CRYPTOGRAPHICALLY SECURE TUNNEL...",
-    "SYNCHRONIZING SECURE KEYRING CREDENTIALS...",
-    "KEYLINE ENVIRONMENT SECURED. REDIRECTING..."
-  ];
-
   useEffect(() => {
-    // Exactly 10 seconds total cinematic session
-    const duration = 10000;
-    const fadeStartTime = 9400; // Start fadeout 600ms before 10s
+    // Exactly 5 seconds total cinematic session
+    const duration = 5000;
+    const fadeStartTime = 4400; // Start fadeout 600ms before 5s
 
     const fadeTimer = setTimeout(() => {
       setIsFading(true);
@@ -39,12 +26,7 @@ export default function VideoSplash({ onFinish }: VideoSplashProps) {
       onFinish();
     }, duration);
 
-    // Rotate simulated developer logs every 600ms for fallback engagement
-    const logInterval = setInterval(() => {
-      setCurrentLogIndex((prev) => (prev + 1) % logs.length);
-    }, 600);
-
-    // High fidelity progress update cycle (runs relative to 10s duration)
+    // High fidelity progress update cycle (runs relative to 5s duration)
     let animationFrameId: number;
     const startTime = Date.now();
 
@@ -63,19 +45,18 @@ export default function VideoSplash({ onFinish }: VideoSplashProps) {
     return () => {
       clearTimeout(fadeTimer);
       clearTimeout(endTimer);
-      clearInterval(logInterval);
       cancelAnimationFrame(animationFrameId);
     };
   }, [onFinish]);
 
-  // Fallback watchdog list to double check if video is blocked/missing
+  // Fallback watchdog to detect block/missing video
   useEffect(() => {
     const watchdog = setTimeout(() => {
       if (videoState === "loading") {
-        console.log("[VIDEO DEBUG] Video did not fire play event in 1s. Defaulting gracefully to cinematic security sequence.");
+        console.log("[VIDEO DEBUG] Video did not fire play event in 1s. Gracefully transitioning via premium fallback.");
         setVideoState("error");
       }
-    }, 1500);
+    }, 1200);
 
     return () => clearTimeout(watchdog);
   }, [videoState]);
@@ -97,14 +78,14 @@ export default function VideoSplash({ onFinish }: VideoSplashProps) {
   return (
     <div
       id="keyline-cinematic-splash"
-      className={`fixed inset-0 z-[9999] bg-[#09090b] flex flex-col items-center justify-center transition-all duration-[550ms] cubic-bezier(0.16, 1, 0.3, 1) ${
+      className={`fixed inset-0 z-[9999] bg-[#0d0e12] flex flex-col items-center justify-center transition-all duration-[550ms] cubic-bezier(0.16, 1, 0.3, 1) ${
         isFading ? "opacity-0 scale-[1.04] pointer-events-none" : "opacity-100 scale-100"
       }`}
     >
-      {/* Background Grid and Glowing Matrix Ambience */}
-      <div className="absolute inset-0 developer-grid opacity-30 pointer-events-none" />
-      <div className="absolute inset-0 developer-dot opacity-60 pointer-events-none" />
-      <div className="absolute w-[500px] h-[500px] bg-orange-600/10 rounded-full blur-[140px] pointer-events-none" />
+      {/* Background Grid and Glowing Matrix Ambience - subtle */}
+      <div className="absolute inset-0 developer-grid opacity-25 pointer-events-none" />
+      <div className="absolute inset-0 developer-dot opacity-45 pointer-events-none" />
+      <div className="absolute w-[450px] h-[450px] bg-orange-600/5 rounded-full blur-[140px] pointer-events-none" />
 
       {/* Top Identity Header bar */}
       <div className="absolute top-8 flex items-center justify-between w-full max-w-5xl px-6">
@@ -122,7 +103,7 @@ export default function VideoSplash({ onFinish }: VideoSplashProps) {
 
         <div className="flex items-center gap-2 px-3 py-1 bg-zinc-900/40 border border-zinc-800/60 rounded-full">
           <Sparkles className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
-          <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Cinematic 10s Launch</span>
+          <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Cinematic 5s Launch</span>
         </div>
       </div>
 
@@ -130,9 +111,10 @@ export default function VideoSplash({ onFinish }: VideoSplashProps) {
       <div className="w-full max-w-4xl px-6 flex flex-col items-center relative">
         <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-zinc-800/80 bg-zinc-950 shadow-2xl shadow-orange-500/5 group">
           
-          {/* Always render video with fallback sources to support any environment name */}
+          {/* Exactly video_20260609_175149.mp4 */}
           <video
             ref={videoRef}
+            src="video_20260609_175149.mp4"
             autoPlay
             muted={isMuted}
             playsInline
@@ -153,52 +135,20 @@ export default function VideoSplash({ onFinish }: VideoSplashProps) {
               setVideoState("error");
             }}
             onEnded={handleSkip}
-          >
-            <source src="1000386695.mp4" type="video/mp4" />
-            <source src="video_20260609_175149.mp4" type="video/mp4" />
-          </video>
+          />
 
-          {/* Premium Loading / Error / Missing Video Fallback Presentation State */}
+          {/* Solid premium loading background state (#0d0e12) with elegant spinner */}
           {videoState !== "playing" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#09090b] p-6 z-0">
-              <div className="absolute inset-0 bg-radial-gradient from-orange-600/5 via-transparent to-transparent pointer-events-none" />
-              
-              {/* Spinning security gear container */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0e12] p-6 z-0">
               <div className="relative mb-6">
-                <div className="absolute inset-0 bg-orange-500/20 rounded-full blur-xl animate-pulse" />
-                <div className="w-16 h-16 rounded-full border border-dashed border-orange-500/30 flex items-center justify-center animate-[spin_10s_linear_infinite]">
-                  <RefreshCw className="w-8 h-8 text-orange-500/40" />
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <ShieldCheck className="w-8 h-8 text-orange-500 animate-pulse" />
-                </div>
+                <Loader2 className="w-10 h-10 animate-spin text-orange-500" />
               </div>
-
-              {/* Title identity signature */}
-              <h3 className="font-sans font-semibold text-lg text-white mb-2 tracking-tight">
-                Authenticating Session Key
+              <h3 className="font-sans font-medium text-sm text-zinc-300 tracking-wider uppercase">
+                Initializing Keyline Provider
               </h3>
-              
-              <p className="text-xs text-zinc-400 font-mono text-center max-w-md h-8 overflow-hidden flex items-center justify-center">
-                <span className="text-orange-500 mr-2">&gt;</span>
-                {logs[currentLogIndex]}
+              <p className="text-[10px] text-zinc-500 font-mono mt-1 text-center">
+                Establishing hardware secure connection...
               </p>
-
-              {/* Tech Spec Badges inside video frame */}
-              <div className="flex items-center gap-6 mt-6 pt-6 border-t border-zinc-900 w-full max-w-md justify-center">
-                <div className="flex items-center gap-1.5 text-zinc-500">
-                  <Cpu className="w-3.5 h-3.5" />
-                  <span className="font-mono text-[9px] uppercase tracking-wider">AES-256</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-zinc-500">
-                  <Database className="w-3.5 h-3.5" />
-                  <span className="font-mono text-[9px] uppercase tracking-wider">TLS 1.3</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-zinc-500">
-                  <Activity className="w-3.5 h-3.5" />
-                  <span className="font-mono text-[9px] uppercase tracking-wider">Secure HS</span>
-                </div>
-              </div>
             </div>
           )}
 
@@ -233,8 +183,8 @@ export default function VideoSplash({ onFinish }: VideoSplashProps) {
             />
           </div>
           <div className="flex items-center justify-between w-full font-mono text-[9px] uppercase tracking-wider text-zinc-500">
-            <span>Progress Matrix</span>
-            <span>{(progress / 10).toFixed(1)}s / 10.0s</span>
+            <span>Security Matrix</span>
+            <span>{(progress / 20).toFixed(1)}s / 5.0s</span>
           </div>
         </div>
 
