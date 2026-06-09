@@ -1,0 +1,8 @@
+{
+  "name": "Remix: KeyLine",
+  "description": "Custom OAuth 2.0 Identity Provider platform and SDK for managing developer application authentication.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Custom Scrollbar Styles for Dark Premium Theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #121214;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ea580c;
+}
+
+/* Custom styles for animations of dots/grids backgrounds */
+.developer-grid {
+  background-image: radial-gradient(#ea580c10 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.developer-dot {
+  background-image: radial-gradient(#ffffff03 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Soft ambient glow effect */
+.orange-glow {
+  filter: drop-shadow(0 0 35px rgba(234, 88, 12, 0.12));
+}
+
