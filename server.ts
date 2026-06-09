@@ -12,40 +12,6 @@ const JWT_SECRET = process.env.JWT_SECRET || "keyline_super_secret_token_key_771
 const app = express();
 const PORT = 3000;
 
-// Resilient startup auto-copy for uploaded video assets
-try {
-  const findMp4File = (dir: string): string | null => {
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
-      if (file === "node_modules" || file === ".git" || file === "dist" || file === "public") continue;
-      const fullPath = path.join(dir, file);
-      const stat = fs.statSync(fullPath);
-      if (stat.isDirectory()) {
-        const found = findMp4File(fullPath);
-        if (found) return found;
-      } else if (file.toLowerCase().endsWith(".mp4") || file.includes("1000386695") || file.includes("video_20260609")) {
-        return fullPath;
-      }
-    }
-    return null;
-  };
-
-  const detectedVideo = findMp4File(process.cwd());
-  const targetPublicPath = path.join(process.cwd(), "public", "1000386695.mp4");
-
-  if (detectedVideo && detectedVideo !== targetPublicPath) {
-    console.log(`[VIDEO SERVICE] Auto-copying detected video from ${detectedVideo} to ${targetPublicPath}`);
-    fs.copyFileSync(detectedVideo, targetPublicPath);
-    // Also copy to original placeholder name for compatibility if needed
-    const oldTarget = path.join(process.cwd(), "public", "video_20260609_175149.mp4");
-    fs.copyFileSync(detectedVideo, oldTarget);
-  } else if (!detectedVideo) {
-    console.log("[VIDEO SERVICE] No source .mp4 file detected yet outside of public/.");
-  }
-} catch (error) {
-  console.error("[VIDEO SERVICE] Non-blocking video auto-copy error on startup:", error);
-}
-
 // Body Parsing Middlewares
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
@@ -78,61 +44,6 @@ try {
   // 1. HEALTH CHECK ENDPOINT
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
-  });
-
-  // 15b. HIGH QUALITY VIDEO SERVING ENDPOINTS (Supports range-requests out-of-the-box via res.sendFile)
-  const handleVideoResponse = (req: any, res: any, targetName: string) => {
-    const pathsToSearch = [
-      path.join(process.cwd(), "public", targetName),
-      path.join(process.cwd(), targetName),
-      path.join(process.cwd(), "assets", targetName),
-      path.join(process.cwd(), "public", "video_20260609_175149.mp4"),
-      path.join(process.cwd(), "video_20260609_175149.mp4"),
-    ];
-
-    for (const p of pathsToSearch) {
-      if (fs.existsSync(p)) {
-        return res.sendFile(p);
-      }
-    }
-
-    // Dynamic recursive finder as a secure fallback
-    const findMp4 = (dir: string): string | null => {
-      try {
-        const files = fs.readdirSync(dir);
-        for (const file of files) {
-          const fullPath = path.join(dir, file);
-          if (file === "node_modules" || file === ".git" || file === "dist") continue;
-          const stat = fs.statSync(fullPath);
-          if (stat.isDirectory()) {
-            const found = findMp4(fullPath);
-            if (found) return found;
-          } else if (file.toLowerCase().endsWith(".mp4") || file.includes("1000386695") || file.includes("video_20260609")) {
-            return fullPath;
-          }
-        }
-      } catch {
-        // ignore
-      }
-      return null;
-    };
-
-    const foundPath = findMp4(process.cwd());
-    if (foundPath) {
-      console.log(`[VIDEO SERVICE] Resilient finder located video at: ${foundPath}`);
-      return res.sendFile(foundPath);
-    }
-
-    console.error("[VIDEO SERVICE] Could not find any suitable video file in the workspace.");
-    res.status(404).send("Cinematic intro video asset not found");
-  };
-
-  app.get("/1000386695.mp4", (req, res) => {
-    handleVideoResponse(req, res, "1000386695.mp4");
-  });
-
-  app.get("/video_20260609_175149.mp4", (req, res) => {
-    handleVideoResponse(req, res, "video_20260609_175149.mp4");
   });
 
   // 2. SIGN UP ENDPOINT
