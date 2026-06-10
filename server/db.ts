@@ -84,6 +84,17 @@ const initialDb: DatabaseSchema = {
       allowedOrigins: [],
       createdAt: new Date().toISOString(),
       status: "active",
+    },
+    {
+      id: "demo-app-oidcdebugger",
+      userId: "demo-user",
+      name: "OIDC Debugger Client",
+      clientId: "kl_client_6o8umibgxh1qsqdi",
+      clientSecret: "kl_secret_6o8umibgxh1qsqdi_secret_keys",
+      redirectUris: ["https://oidcdebugger.com/redirect"],
+      allowedOrigins: ["https://oidcdebugger.com"],
+      createdAt: new Date().toISOString(),
+      status: "active",
     }
   ],
   databaseRecords: [
@@ -143,6 +154,26 @@ class FileDB {
     try {
       const data = await fs.readFile(DB_FILE, "utf-8");
       this.cache = JSON.parse(data) as DatabaseSchema;
+      
+      // Ensure the hardcoded oidcdebugger sandbox client_id is always present
+      const targetClientId = "kl_client_6o8umibgxh1qsqdi";
+      const hasApp = this.cache.applications.some((a) => a.clientId === targetClientId);
+      if (!hasApp) {
+        console.log(`[DATABASE INIT] Injecting missing sandbox client: ${targetClientId}`);
+        this.cache.applications.push({
+          id: "demo-app-oidcdebugger",
+          userId: "demo-user",
+          name: "OIDC Debugger Client",
+          clientId: targetClientId,
+          clientSecret: "kl_secret_6o8umibgxh1qsqdi_secret_keys",
+          redirectUris: ["https://oidcdebugger.com/redirect"],
+          allowedOrigins: ["https://oidcdebugger.com"],
+          createdAt: new Date().toISOString(),
+          status: "active",
+        });
+        await this.save(this.cache);
+      }
+      
       return this.cache;
     } catch (err) {
       // File not found or corrupted, write initial and return
