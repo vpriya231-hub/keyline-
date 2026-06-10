@@ -4,6 +4,7 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
 import { db } from "./server/db";
 
 // Use a fallback JWT Secret for security and reliability in sandbox
@@ -59,6 +60,69 @@ const PORT = 3000;
     scope: string; 
     expiresAt: number; 
   }>();
+
+  // Custom production mail dispatcher for real secure OTP delivery
+  const sendOTPEmail = async (email: string, name: string, otp: string) => {
+    const host = process.env.SMTP_HOST;
+    const port = parseInt(process.env.SMTP_PORT || "587", 10);
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    const from = process.env.SMTP_FROM || `Keyline Security <no-reply@keyline.io>`;
+
+    const msgBody = `
+Hello ${name},
+
+Your KeyLine Provider authorization dynamic passkey is: ${otp}
+
+This verification code will expire in 5 minutes. If you did not initiate this authentication request, please ignore this email or secure your password immediately.
+
+Best regards,
+The KeyLine Security Team
+    `;
+
+    const msgHtml = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0d0e12; color: #f4f4f5; padding: 2.5rem; max-width: 500px; margin: 0 auto; border-radius: 12px; border: 1px solid #27272a;">
+        <h2 style="color: #ffffff; border-bottom: 2px solid #f97316; padding-bottom: 0.5rem; margin-top: 0; font-family: 'Space Grotesk', sans-serif;">KeyLine Authorization</h2>
+        <p style="font-size: 15px; line-height: 1.6; color: #a1a1aa;">A sign-on attempt to your KeyLine identity credential has been requested.</p>
+        <div style="text-align: center; margin: 2rem 0;">
+          <span style="font-family: monospace; font-size: 32px; font-weight: bold; color: #f97316; letter-spacing: 0.15em; background-color: #14151a; padding: 12px 24px; border-radius: 8px; border: 1px solid #3f3f46; display: inline-block;">${otp}</span>
+        </div>
+        <p style="font-size: 13px; line-height: 1.4; color: #71717a;">This verification pin is valid for precisely 5 minutes and is strictly single-use only.</p>
+        <hr style="border: 0; border-top: 1px solid #27272a; margin: 2rem 0;" />
+        <p style="font-size: 11px; color: #52525b; text-align: center;">This notification was issued automatically by the KeyLine Trust Network.</p>
+      </div>
+    `;
+
+    if (host && user && pass) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host,
+          port,
+          secure: port === 465,
+          auth: {
+            user,
+            pass,
+          },
+        });
+
+        await transporter.sendMail({
+          from,
+          to: email,
+          subject: `🔑 [KeyLine Security Verification] Authorization OTP Code: ${otp}`,
+          text: msgBody,
+          html: msgHtml,
+        });
+
+        console.log(`[MAIL SERVICE] OTP sent successfully to ${email}`);
+        return true;
+      } catch (err) {
+        console.error(`[MAIL ERROR] Failed sending real email via configured SMTP:`, err);
+      }
+    } else {
+      console.warn(`[MAIL WARNING] SMTP environment credentials are missing. Running in simulated fallback mode.`);
+    }
+    return false;
+  };
 
   // Helper function to return beautiful KeyLine-themed custom security portal UI
   const renderOAuthStyle = (title: string, bodyContent: string) => `
@@ -343,11 +407,6 @@ const PORT = 3000;
 
           <button type="submit" class="btn">Authenticate Password</button>
         </form>
-
-        <div class="developer-badge">
-          <strong>💡 Developer Sandbox Hint:</strong><br/>
-          Use email <code>vastratester@gmail.com</code> with password <code>password</code> to instantly complete sandbox testing.
-        </div>
       `;
 
       return res.send(renderOAuthStyle("Sign In", bodyHtml));
@@ -450,6 +509,9 @@ const PORT = 3000;
         expiresAt: Date.now() + 5 * 60000 // Valid for 5 minutes
       });
 
+      // Dispatch real email OTP (asynchronously so it doesn't block the dynamic client rendering)
+      await sendOTPEmail(user.email, user.name, otp);
+
       // Assertive output to the server developer logs
       console.log(`\n\n======================================================`);
       console.log(`🔑 [KEYLINE SECURE MULTI-FACTOR EMAIL OTP CODE DELIVERED]`);
@@ -472,15 +534,6 @@ const PORT = 3000;
 
           <button type="submit" class="btn">Confirm Security Code</button>
         </form>
-
-        <div class="developer-badge">
-          <strong>🔧 Simulated Email Mailbox:</strong><br/>
-          Standard sandbox SMTP simulation intercepted. Your dynamic security validation pin is:<br/>
-          <div class="otp-display">
-            <span class="otp-token-box">${otp}</span>
-          </div>
-          <span style="font-size: 10px; color:#a1a1aa; display:block; text-align:center;">This pin is printed output in your server container node trace.</span>
-        </div>
       `;
 
       return res.send(renderOAuthStyle("Confirm OTP Pin", otpBodyHtml));
@@ -513,7 +566,7 @@ const PORT = 3000;
       if (activeFlow.otp !== otp.trim()) {
         const attemptsHtml = `
           <h2>Enter 6-Digit Verification Code</h2>
-          <div class="error-box"><strong>security_alert:</strong> The security code entered is invalid or mismatched. Please check your simulated mailbox badge and input precisely.</div>
+          <div class="error-box"><strong>security_alert:</strong> The security code entered is invalid or mismatched. Please check your mailbox and input precisely.</div>
           
           <form action="/oauth/authorize/verify" method="POST">
             <input type="hidden" name="otp_session_id" value="${otp_session_id}">
@@ -525,14 +578,6 @@ const PORT = 3000;
 
             <button type="submit" class="btn">Confirm Security Code</button>
           </form>
-
-          <div class="developer-badge">
-            <strong>🔧 Simulated Email Mailbox:</strong><br/>
-            Standard sandbox SMTP simulation intercepted. Your dynamic security validation pin is:<br/>
-            <div class="otp-display">
-              <span class="otp-token-box">${activeFlow.otp}</span>
-            </div>
-          </div>
         `;
         return res.send(renderOAuthStyle("Invalid OTP", attemptsHtml));
       }
