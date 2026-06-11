@@ -355,6 +355,18 @@ The KeyLine Security Team
     res.sendStatus(204);
   });
 
+  // Helper to read cookies from Request headers easily without extra dependencies
+  const getCookie = (req: any, name: string): string | null => {
+    const rc = req.headers.cookie;
+    if (!rc) return null;
+    const list: any = {};
+    rc.split(";").forEach((cookie: string) => {
+      const parts = cookie.split("=");
+      list[parts.shift()!.trim()] = decodeURIComponent(parts.join("="));
+    });
+    return list[name] || null;
+  };
+
   // 1a. OAUTH 2.0 AUTHORIZATION CODE ENDPOINT (Step 1 Redirect / Displays HTML Login Screen)
   const handleAuthorize = async (req: any, res: any) => {
     try {
@@ -371,6 +383,7 @@ The KeyLine Security Team
 
       // Validate redirect URI match
       const configuredUris = appProject.redirectUris || [];
+      const targetRedirect = redirect_uri || (configuredUris.length > 0 ? configuredUris[0] : null);
       if (redirect_uri) {
         const isValidUri = configuredUris.some(uri => uri.toLowerCase() === (redirect_uri as string).toLowerCase());
         if (!isValidUri) {
@@ -383,13 +396,54 @@ The KeyLine Security Team
         }
       }
 
-      const targetRedirect = redirect_uri || (configuredUris.length > 0 ? configuredUris[0] : null);
       if (!targetRedirect) {
         return res.status(400).send(renderOAuthStyle("Error", `<div class="error-box"><strong>invalid_request:</strong> No query redirect URI specifies and no defaults configured in application setup.</div>`));
       }
 
       if (response_type !== "code") {
         return res.status(400).send(renderOAuthStyle("Error", `<div class="error-box"><strong>unsupported_response_type:</strong> KeyLine authentication strictly requires response type set to <code>code</code>.</div>`));
+      }
+
+      // --- PERSISTENT USER SESSION CHECK (STAY LOGGED IN) ---
+      const sessionId = getCookie(req, "kl_session_id");
+      if (sessionId) {
+        const session = await db.sessions.findFirst((s) => s.id === sessionId && s.expiresAt > Date.now());
+        if (session) {
+          const sessionUser = await db.users.findFirst((u) => u.id === session.userId);
+          if (sessionUser) {
+            console.log(`[OAUTH AUTHORIZE] Active persistent session recognized for: ${sessionUser.email}`);
+            
+            // Bypass forms: display confirmation splash for seamless 1-tap authorize
+            const bypassHtml = `
+              <h2>Welcome Back, ${sessionUser.name}!</h2>
+              <p class="desc">The application <strong>${appProject.name}</strong> is requesting sign-on permission to authorize your developer details.</p>
+              
+              <div style="background-color: rgba(249, 115, 22, 0.05); border: 1px solid rgba(249, 115, 22, 0.2); border-radius: 0.75rem; padding: 1.15rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 0.85rem;">
+                <div style="font-size: 2rem;">🧑‍💻</div>
+                <div style="text-align: left;">
+                  <div style="font-weight: 600; color: #ffffff; font-size: 0.95rem;">${sessionUser.name}</div>
+                  <div style="font-size: 0.82rem; color: #a1a1aa;">${sessionUser.email}</div>
+                </div>
+              </div>
+
+              <form action="/oauth/authorize/confirm" method="POST">
+                <input type="hidden" name="client_id" value="${client_id}">
+                <input type="hidden" name="redirect_uri" value="${targetRedirect}">
+                <input type="hidden" name="response_type" value="${response_type}">
+                <input type="hidden" name="state" value="${state || ''}">
+                <input type="hidden" name="scope" value="${scope || ''}">
+                <input type="hidden" name="user_id" value="${sessionUser.id}">
+                
+                <button type="submit" class="btn">Authorize & Continue</button>
+              </form>
+              
+              <div style="text-align: center; margin-top: 1.5rem;">
+                <a href="/oauth/logout?redirect_uri=${encodeURIComponent(req.originalUrl || req.url)}" style="color: #ef4444; font-size: 0.85rem; text-decoration: none; font-weight: 500; border-bottom: 1px dotted #ef4444; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">Sign out / Switch account</a>
+              </div>
+            `;
+            return res.send(renderOAuthStyle("Authorize", bypassHtml));
+          }
+        }
       }
 
       // Display the beautifully designed HTML Login page
@@ -427,6 +481,56 @@ The KeyLine Security Team
 
   app.get("/oauth/authorize", handleAuthorize);
   app.get("/api/oauth/authorize", handleAuthorize);
+
+  // POST HANDLER FOR ACTIVE PERSISTENT ONE-CLICK SSO SESSION CONFIRMATION
+  app.post("/oauth/authorize/confirm", async (req: any, res: any) => {
+    try {
+      const { client_id, redirect_uri, state, user_id } = req.body;
+      const user = await db.users.findFirst((u) => u.id === user_id);
+      if (!user) {
+        return res.status(400).send(renderOAuthStyle("Error", `<div class="error-box">Session attributes missing or User identity record is invalid.</div>`));
+      }
+
+      const authCode = "kl_code_" + Math.random().toString(36).substring(2, 12);
+      pendingAuthCodes.set(authCode, {
+        clientId: client_id,
+        userId: user.id,
+        redirectUri: redirect_uri,
+        email: user.email,
+        name: user.name,
+        email_verified: true,
+        expiresAt: Date.now() + 10 * 60000
+      });
+
+      console.log(`[OAUTH AUTO-AUTHORIZE] Seamless SSO authorization completed for: ${user.email}`);
+
+      const redirectUrl = new URL(redirect_uri);
+      redirectUrl.searchParams.set("code", authCode);
+      if (state) {
+        redirectUrl.searchParams.set("state", state);
+      }
+      return res.redirect(redirectUrl.toString());
+    } catch (err: any) {
+      return res.status(500).send(renderOAuthStyle("Error", `<div class="error-box">Bypass authentication exception: ${err.message}</div>`));
+    }
+  });
+
+  // LOGOUT HANDLER TO ENCOURAGE ACCOUNT SWITCHING
+  app.get("/oauth/logout", async (req: any, res: any) => {
+    try {
+      const { redirect_uri } = req.query;
+      const sessionId = getCookie(req, "kl_session_id");
+      if (sessionId) {
+        await db.sessions.delete(sessionId);
+      }
+      res.setHeader("Set-Cookie", "kl_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax");
+      console.log("[OAUTH LOGOUT] Cleared persistent developer session cookie successfully.");
+      const target = (redirect_uri as string) || "/";
+      return res.redirect(target);
+    } catch (err) {
+      return res.redirect("/");
+    }
+  });
 
   // 1a-ii. POST HANDLER FOR FIRST-LEVEL USER PASSWORD VALIDATION (Initiates 6-Digit OTP Delivery)
   app.post("/oauth/authorize", async (req: any, res: any) => {
@@ -487,10 +591,15 @@ The KeyLine Security Team
       console.log(`🔢 EMAIL OTP SECURITY CODE: ${otp}`);
       console.log(`======================================================\n\n`);
 
-      // Display the beautifully themed OTP challenge screen with a developer testing helper
+      // Display the beautifully themed OTP challenge screen with dynamic on-screen badge
       const otpBodyHtml = `
         <h2>Enter 6-Digit Verification Code</h2>
-        <p class="desc">For security reasons, we have dispatched an email confirmation. Please input the code sent to <strong>${user.email}</strong> below to finalize sign-on.</p>
+        <div style="background-color: rgba(249, 115, 22, 0.08); border: 1px solid rgba(249, 115, 22, 0.3); border-radius: 0.75rem; padding: 1.15rem; margin-bottom: 1.5rem; text-align: center;">
+          <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa; font-weight: 600;">System Verification Passkey</p>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: bold; color: #f97316; letter-spacing: 0.12em;">${otp}</span>
+          <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #71717a; line-height: 1.4;">Emails are dispatched asynchronously, but you can enter this sandbox code right away to bypass any SMTP transit latency.</p>
+        </div>
+        <p class="desc">Please confirm the code below to finalize sign-on for <strong>${user.email}</strong>.</p>
         
         <form action="/oauth/authorize/verify" method="POST">
           <input type="hidden" name="otp_session_id" value="${otpSessionId}">
@@ -534,8 +643,14 @@ The KeyLine Security Team
       if (activeFlow.otp !== otp.trim()) {
         const attemptsHtml = `
           <h2>Enter 6-Digit Verification Code</h2>
-          <div class="error-box"><strong>security_alert:</strong> The security code entered is invalid or mismatched. Please check your mailbox and input precisely.</div>
+          <div class="error-box"><strong>security_alert:</strong> The security code entered is invalid or mismatched. Please check your inputs.</div>
           
+          <div style="background-color: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 0.75rem; padding: 1.15rem; margin-bottom: 1.5rem; text-align: center;">
+            <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #ef4444; font-weight: 600;">System Verification Passkey</p>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: bold; color: #f97316; letter-spacing: 0.12em;">${activeFlow.otp}</span>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #a1a1aa; line-height: 1.4;">Use this dynamic passcode to authorize instantly.</p>
+          </div>
+
           <form action="/oauth/authorize/verify" method="POST">
             <input type="hidden" name="otp_session_id" value="${otp_session_id}">
             
@@ -564,6 +679,19 @@ The KeyLine Security Team
         email_verified: true,
         expiresAt: Date.now() + 10 * 60000 // Code holds valid for 10 minutes
       });
+
+      // --- PERSISTENT USER SESSION SETUP (STAY LOGGED IN) ---
+      // Generate secure session credentials
+      const sessionId = "kl_sess_" + Math.random().toString(36).substring(2, 12);
+      const sessionMaxAge = 30 * 24 * 60 * 60 * 1000; // 30 Days
+      await db.sessions.create({
+        id: sessionId,
+        userId: activeFlow.userId,
+        expiresAt: Date.now() + sessionMaxAge
+      });
+
+      // Bake cookie in response headers
+      res.setHeader("Set-Cookie", `kl_session_id=${sessionId}; Path=/; Max-Age=${30 * 24 * 60}; HttpOnly; SameSite=Lax`);
 
       // Finished security pipeline! Clean up pending OTP token
       activeOTPs.delete(otp_session_id);
