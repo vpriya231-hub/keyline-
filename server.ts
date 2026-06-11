@@ -64,15 +64,17 @@ const PORT = 3000;
     expiresAt: number; 
   }>();
 
-  // Custom production mail dispatcher for real secure OTP delivery via Resend or SMTP
+  // Custom production mail dispatcher for real secure OTP delivery via Brevo REST API or Brevo SMTP relay
   const sendOTPEmail = async (email: string, name: string, otp: string) => {
-    const resendApiKey = process.env.RESEND_API_KEY;
-    const resendFrom = process.env.RESEND_FROM || `Keyline Security <onboarding@resend.dev>`;
-    const host = process.env.SMTP_HOST;
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    const brevoFromEmail = process.env.BREVO_FROM_EMAIL || "onboarding@brevo.dev";
+    const brevoFromName = process.env.BREVO_FROM_NAME || "KeyLine Security";
+
+    const host = process.env.SMTP_HOST || (brevoApiKey ? "smtp-relay.brevo.com" : null);
     const port = parseInt(process.env.SMTP_PORT || "587", 10);
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    const from = process.env.SMTP_FROM || `Keyline Security <no-reply@keyline.io>`;
+    const user = process.env.SMTP_USER || process.env.BREVO_SMTP_USER || null;
+    const pass = process.env.SMTP_PASS || brevoApiKey || null;
+    const from = process.env.SMTP_FROM || `${brevoFromName} <${brevoFromEmail}>`;
 
     const msgBody = `
 Hello ${name},
@@ -98,39 +100,50 @@ The KeyLine Security Team
       </div>
     `;
 
-    if (resendApiKey) {
+    // 1. Direct Brevo HTTP API
+    if (brevoApiKey) {
       try {
-        console.log(`[MAIL SERVICE] Dispatching OTP via Resend API to: ${email}`);
-        const response = await fetch("https://api.resend.com/emails", {
+        console.log(`[MAIL SERVICE] Dispatching OTP via Brevo REST API to: ${email}`);
+        const response = await fetch("https://api.brevo.com/v3/smtp/email", {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${resendApiKey}`,
-            "Content-Type": "application/json"
+            "accept": "application/json",
+            "api-key": brevoApiKey,
+            "content-type": "application/json"
           },
           body: JSON.stringify({
-            from: resendFrom,
-            to: [email],
+            sender: {
+              name: brevoFromName,
+              email: brevoFromEmail
+            },
+            to: [
+              {
+                email: email,
+                name: name
+              }
+            ],
             subject: `🔑 [KeyLine Security Verification] Authorization OTP Code: ${otp}`,
-            text: msgBody,
-            html: msgHtml
+            textContent: msgBody,
+            htmlContent: msgHtml
           })
         });
 
         if (response.ok) {
-          console.log(`[MAIL SERVICE] Security OTP email delivered successfully via Resend API to ${email}`);
+          console.log(`[MAIL SERVICE] Security OTP email delivered successfully via Brevo REST API to ${email}`);
           return true;
         } else {
           const errMsg = await response.text();
-          console.error(`[MAIL ERROR] Resend API failed sending email:`, errMsg);
+          console.error(`[MAIL ERROR] Brevo REST API failed sending email:`, errMsg);
         }
       } catch (err: any) {
-        console.error(`[MAIL ERROR] Resend API exception:`, err.message || err);
+        console.error(`[MAIL ERROR] Brevo REST API exception:`, err.message || err);
       }
     }
 
+    // 2. Nodemailer SMTP (including Brevo Relay config if explicitly configured or as a fallback)
     if (host && user && pass) {
       try {
-        console.log(`[MAIL SERVICE] Opening SMTP connection tunnel for sending OTP to recipient: ${email}...`);
+        console.log(`[MAIL SERVICE] Opening SMTP connection tunnel (${host}:${port}) for sending OTP to recipient: ${email}...`);
         const transporter = nodemailer.createTransport({
           host,
           port,
@@ -139,8 +152,8 @@ The KeyLine Security Team
             user,
             pass,
           },
-          connectionTimeout: 4000,
-          greetingTimeout: 4000,
+          connectionTimeout: 5000,
+          greetingTimeout: 5000,
           socketTimeout: 5000,
         });
 
@@ -152,13 +165,13 @@ The KeyLine Security Team
           html: msgHtml,
         });
 
-        console.log(`[MAIL SERVICE] Security OTP email delivered successfully via SMTP to ${email}`);
+        console.log(`[MAIL SERVICE] Security OTP email delivered successfully via SMTP (${host}) to ${email}`);
         return true;
       } catch (err: any) {
         console.error(`[MAIL ERROR] Failed sending real email via configured SMTP:`, err.message || err);
       }
     } else {
-      console.warn(`[MAIL WARNING] Neither Resend API key nor SMTP credentials are fully populated. Running in simulated logs-only fallback.`);
+      console.warn(`[MAIL WARNING] Neither Brevo API key nor SMTP credentials are fully populated. Running in simulated logs-only fallback.`);
     }
     return false;
   };
@@ -406,6 +419,10 @@ The KeyLine Security Team
         return res.status(400).send(renderOAuthStyle("Error", `<div class="error-box"><strong>invalid_request:</strong> Missing required query parameter: <code>client_id</code></div>`));
       }
 
+      if (client_id !== "kl_client_362du52wt2rbxygg") {
+        return res.status(403).send(renderOAuthStyle("Access Denied", `<div class="error-box"><strong>access_denied:</strong> The authorization system is strictly restricted to route login requests for the designated Client ID: <code>kl_client_362du52wt2rbxygg</code>. Other clients are not processed.</div>`));
+      }
+
       const appProject = await db.applications.findFirst((a) => a.clientId === client_id);
       if (!appProject) {
         return res.status(401).send(renderOAuthStyle("Error", `<div class="error-box"><strong>invalid_client:</strong> Unrecognized <code>client_id</code> credential specify. Check application registration dashboard.</div>`));
@@ -516,6 +533,11 @@ The KeyLine Security Team
   app.post("/oauth/authorize/confirm", async (req: any, res: any) => {
     try {
       const { client_id, redirect_uri, state, user_id } = req.body;
+
+      if (client_id !== "kl_client_362du52wt2rbxygg") {
+        return res.status(403).send(renderOAuthStyle("Access Denied", `<div class="error-box"><strong>access_denied:</strong> The authorization system is strictly restricted to route login requests for the designated Client ID: <code>kl_client_362du52wt2rbxygg</code>. Other clients are not processed.</div>`));
+      }
+
       const user = await db.users.findFirst((u) => u.id === user_id);
       if (!user) {
         return res.status(400).send(renderOAuthStyle("Error", `<div class="error-box">Session attributes missing or User identity record is invalid.</div>`));
@@ -569,6 +591,10 @@ The KeyLine Security Team
 
       if (!client_id || !email || !password) {
         return res.status(400).send(renderOAuthStyle("Credentials Mismatch", `<div class="error-box">Missing required client credentials or session fields.</div>`));
+      }
+
+      if (client_id !== "kl_client_362du52wt2rbxygg") {
+        return res.status(403).send(renderOAuthStyle("Access Denied", `<div class="error-box"><strong>access_denied:</strong> The authorization system is strictly restricted to route login requests for the designated Client ID: <code>kl_client_362du52wt2rbxygg</code>. Other clients are not processed.</div>`));
       }
 
       // Authenticate User in Database dynamically

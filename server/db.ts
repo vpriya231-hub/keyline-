@@ -79,9 +79,29 @@ class JsonDB {
       if (fs.existsSync(DB_FILE)) {
         const fileContent = fs.readFileSync(DB_FILE, "utf-8");
         const parsed = JSON.parse(fileContent);
+        
+        // Ensure our specific default production client exists dynamically
+        const apps = parsed.applications || [];
+        const hasSpecificClient = apps.some((a: any) => a.clientId === "kl_client_362du52wt2rbxygg");
+        if (!hasSpecificClient) {
+          apps.push({
+            id: "kl_app_specific_prod",
+            userId: "demo-user",
+            name: "KeyLine Production Client",
+            clientId: "kl_client_362du52wt2rbxygg",
+            clientSecret: "kl_secret_362du52wt2rbxygg_secret_key",
+            redirectUris: ["https://oidcdebugger.com/redirect", "http://localhost:4000/auth/callback"],
+            allowedOrigins: ["https://oidcdebugger.com", "http://localhost:4000"],
+            createdAt: new Date().toISOString(),
+            status: "active",
+          });
+          parsed.applications = apps;
+          fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), "utf-8");
+        }
+
         return {
           users: parsed.users || [],
-          applications: parsed.applications || [],
+          applications: apps,
           database_records: parsed.database_records || [],
           storage_records: parsed.storage_records || [],
           end_users: parsed.end_users || [],
@@ -93,6 +113,17 @@ class JsonDB {
     }
 
     const initialApps: DatabaseApplication[] = [
+      {
+        id: "kl_app_specific_prod",
+        userId: "demo-user",
+        name: "KeyLine Production Client",
+        clientId: "kl_client_362du52wt2rbxygg",
+        clientSecret: "kl_secret_362du52wt2rbxygg_secret_key",
+        redirectUris: ["https://oidcdebugger.com/redirect", "http://localhost:4000/auth/callback"],
+        allowedOrigins: ["https://oidcdebugger.com", "http://localhost:4000"],
+        createdAt: new Date().toISOString(),
+        status: "active",
+      },
       {
         id: "kl_app_default1",
         userId: "demo-user",
