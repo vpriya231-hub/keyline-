@@ -390,9 +390,54 @@ The KeyLine Security Team
     </html>
   `;
 
+  // Dynamic CORS origin verification & setup helper
+  const setDynamicCORS = async (req: any, res: any) => {
+    const origin = req.headers.origin || "";
+    if (!origin) {
+      // If there's no Origin header, CORS setup is not strictly required.
+      return;
+    }
+
+    try {
+      // Parse client details from the database using client_id if present
+      const clientId = (req.query?.client_id || req.body?.client_id || "").toString().trim();
+      const apps = await db.applications.findMany();
+      let isAllowed = false;
+
+      if (clientId) {
+        const appRecord = apps.find(a => a.clientId === clientId);
+        if (appRecord) {
+          const allowedOrigins = appRecord.allowedOrigins || [];
+          if (allowedOrigins.some(o => o.trim().toLowerCase() === origin.trim().toLowerCase())) {
+            isAllowed = true;
+          }
+        }
+      }
+
+      // If database lookup isn't possible instantly during the preflight handshake or clientId is absent,
+      // validate the incoming origin against our entire registered application database list.
+      if (!isAllowed) {
+        const anyMatch = apps.some(appRecord => {
+          const allowedOrigins = appRecord.allowedOrigins || [];
+          return allowedOrigins.some(o => o.trim().toLowerCase() === origin.trim().toLowerCase());
+        });
+        if (anyMatch) {
+          isAllowed = true;
+        }
+      }
+
+      // Dynamically allow that specific request's registered origin
+      if (isAllowed) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+      }
+    } catch (err) {
+      console.error("[CORS ERROR] Exception during dynamic lookup:", err);
+    }
+  };
+
   // CORS handler for OAuth token preflight
-  app.options(["/oauth/token", "/api/oauth/token"], (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
+  app.options(["/oauth/token", "/api/oauth/token"], async (req, res) => {
+    await setDynamicCORS(req, res);
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.sendStatus(204);
@@ -772,7 +817,7 @@ The KeyLine Security Team
   // 1b. OAUTH 2.0 TOKEN EXCHANGE ENDPOINT (Step 2 Token Post / Exchanges authCode for fully signed JWT credentials)
   const handleTokenExchange = async (req: any, res: any) => {
     // Explicit CORS headers
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    await setDynamicCORS(req, res);
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
 
@@ -868,7 +913,7 @@ The KeyLine Security Team
 
   // 1c. OAUTH 2.0 USERINFO ENDPOINT
   const handleUserInfo = async (req: any, res: any) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    await setDynamicCORS(req, res);
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 
