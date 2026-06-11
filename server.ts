@@ -621,8 +621,8 @@ The KeyLine Security Team
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       const otpSessionId = "otp_" + Math.random().toString(36).substring(2, 12);
 
-      // Save flow state inside secure session register
-      activeOTPs.set(otpSessionId, {
+      // Save flow state inside secure session register mapped directly to the user's email
+      activeOTPs.set(user.email.toLowerCase(), {
         otp,
         email: user.email,
         userId: user.id,
@@ -654,6 +654,7 @@ The KeyLine Security Team
         
         <form action="/oauth/authorize/verify" method="POST">
           <input type="hidden" name="otp_session_id" value="${otpSessionId}">
+          <input type="hidden" name="email" value="${user.email}">
           
           <div class="form-group">
             <label for="otp">One-Time Security Pin</label>
@@ -674,30 +675,41 @@ The KeyLine Security Team
   // 1a-iii. POST HANDLER FOR ACTIVE OTP VERIFICATION - GENERATES FINAL OAUTH CODE
   app.post("/oauth/authorize/verify", async (req: any, res: any) => {
     try {
-      const { otp_session_id, otp } = req.body;
+      const { otp_session_id, otp, email } = req.body;
 
-      if (!otp_session_id || !otp) {
+      if (!otp) {
         return res.status(400).send(renderOAuthStyle("Verification Denied", `<div class="error-box">Session attributes or validation pins missing from request payload.</div>`));
       }
 
-      const activeFlow = activeOTPs.get(otp_session_id);
+      // Determine lookup key - prioritize email mapping to avoid session-id lookup mismatches
+      const lookupKey = email ? email.toString().trim().toLowerCase() : (otp_session_id || "");
+      if (!lookupKey) {
+        return res.status(400).send(renderOAuthStyle("Verification Denied", `<div class="error-box">Identity email address or session key is missing from request payload.</div>`));
+      }
+
+      const activeFlow = activeOTPs.get(lookupKey);
       if (!activeFlow) {
         return res.status(400).send(renderOAuthStyle("Session Expired", `<div class="error-box">The multi-factor session has closed or expired. Please return to your original sign-on app.</div>`));
       }
 
       if (activeFlow.expiresAt < Date.now()) {
-        activeOTPs.delete(otp_session_id);
+        activeOTPs.delete(lookupKey);
         return res.status(400).send(renderOAuthStyle("Session Expired", `<div class="error-box">The OTP verification code has timed out. Please request a new authentication packet.</div>`));
       }
 
+      // Parse both the submitted code and the stored code properly to avoid data-type mismatches
+      const submittedCode = otp.toString().trim();
+      const storedCode = activeFlow.otp.toString().trim();
+
       // Check entered OTP challenge
-      if (activeFlow.otp !== otp.trim()) {
+      if (storedCode !== submittedCode) {
         const attemptsHtml = `
           <h2>Enter 6-Digit Verification Code</h2>
           <div class="error-box" style="margin-bottom: 2rem;"><strong>security_alert:</strong> The security code entered is invalid or mismatched. Please check your email inbox and insert the precise code.</div>
           
           <form action="/oauth/authorize/verify" method="POST">
-            <input type="hidden" name="otp_session_id" value="${otp_session_id}">
+            <input type="hidden" name="otp_session_id" value="${otp_session_id || ''}">
+            <input type="hidden" name="email" value="${activeFlow.email}">
             
             <div class="form-group">
               <label for="otp">One-Time Security Pin</label>
@@ -738,8 +750,8 @@ The KeyLine Security Team
       // Bake cookie in response headers
       res.setHeader("Set-Cookie", `kl_session_id=${sessionId}; Path=/; Max-Age=${30 * 24 * 60}; HttpOnly; SameSite=Lax`);
 
-      // Finished security pipeline! Clean up pending OTP token
-      activeOTPs.delete(otp_session_id);
+      // Finished security pipeline! Clean up pending OTP token mapped to the email
+      activeOTPs.delete(lookupKey);
 
       console.log(`[MF-OTP VERIFIED] Secure login validation success for recipient: ${activeFlow.email}. Launching authCode redirect.`);
 
