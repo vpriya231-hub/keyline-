@@ -93,8 +93,11 @@ The KeyLine Security Team
       </div>
     `;
 
+    console.log(`[MAIL SERVICE] Configuring secure SMTP client [Host: ${host}, Port: ${port}, User: ${user}, From: ${from}, Pass Configured: ${pass ? "YES" : "NO"}]`);
+
     if (host && user && pass) {
       try {
+        console.log(`[MAIL SERVICE] Opening SMTP connection tunnel for sending OTP to recipient: ${email}...`);
         const transporter = nodemailer.createTransport({
           host,
           port,
@@ -103,6 +106,9 @@ The KeyLine Security Team
             user,
             pass,
           },
+          connectionTimeout: 4000, // 4 seconds limit on establishing connection
+          greetingTimeout: 4000,   // 4 seconds limit on SMTP handshake/greeting
+          socketTimeout: 5000,     // 5 seconds limit on idle socket inactivity
         });
 
         await transporter.sendMail({
@@ -113,13 +119,13 @@ The KeyLine Security Team
           html: msgHtml,
         });
 
-        console.log(`[MAIL SERVICE] OTP sent successfully to ${email}`);
+        console.log(`[MAIL SERVICE] Security OTP email delivered successfully to ${email}`);
         return true;
-      } catch (err) {
-        console.error(`[MAIL ERROR] Failed sending real email via configured SMTP:`, err);
+      } catch (err: any) {
+        console.error(`[MAIL ERROR] Failed sending real email via configured SMTP:`, err.message || err);
       }
     } else {
-      console.warn(`[MAIL WARNING] SMTP environment credentials are missing. Running in simulated fallback mode.`);
+      console.warn(`[MAIL WARNING] Demanded SMTP environment credentials are unpopulated (SMTP_HOST, SMTP_USER, or SMTP_PASS). Running in simulated logs-only fallback.`);
     }
     return false;
   };
@@ -509,8 +515,10 @@ The KeyLine Security Team
         expiresAt: Date.now() + 5 * 60000 // Valid for 5 minutes
       });
 
-      // Dispatch real email OTP (asynchronously so it doesn't block the dynamic client rendering)
-      await sendOTPEmail(user.email, user.name, otp);
+      // Dispatch real email OTP (without blocking await, letting it process in background)
+      sendOTPEmail(user.email, user.name, otp).catch((mailErr) => {
+        console.error(`[MAIL BACKGROUND PROCESS ERROR] Background mail dispatcher crash:`, mailErr);
+      });
 
       // Assertive output to the server developer logs
       console.log(`\n\n======================================================`);
@@ -662,6 +670,11 @@ The KeyLine Security Team
       // Consume token code immediately to adhere to OAuth 2.0 single-use standards
       pendingAuthCodes.delete(code);
 
+      // Retrieve fresh, dynamic user details from the database to guarantee the latest information is handed off
+      const matchedUser = await db.users.findFirst((u) => u.id === codeRecord.userId);
+      const userEmail = matchedUser ? matchedUser.email : codeRecord.email;
+      const userName = matchedUser ? matchedUser.name : codeRecord.name;
+
       // Generate a legitimate secure Bearer Token (JWT Signed session representing verified identity)
       const accessToken = jwt.sign(
         { userId: codeRecord.userId, clientId: client_id, scope: "openid profile email" },
@@ -669,19 +682,37 @@ The KeyLine Security Team
         { expiresIn: "10h" }
       );
 
-      console.log(`[OAUTH TOKEN EXCHANGE] Successful handoff for verified account: ${codeRecord.email}`);
+      // Generate an OIDC id_token containing the standard OIDC user claims for client decoding (such as oidcdebugger.com)
+      const appUrl = process.env.APP_URL || "https://keyline.io";
+      const idToken = jwt.sign(
+        {
+          iss: appUrl,
+          sub: codeRecord.userId,
+          aud: client_id,
+          exp: Math.floor(Date.now() / 1000) + 3600, // Valid for exactly 1 hour
+          iat: Math.floor(Date.now() / 1000),
+          auth_time: Math.floor(Date.now() / 1000) - 60,
+          name: userName,
+          email: userEmail,
+          email_verified: true,
+        },
+        JWT_SECRET
+      );
+
+      console.log(`[OAUTH TOKEN EXCHANGE] Successful handoff for verified account: ${userEmail}`);
 
       // Return real credentials and verified status of the actual authenticated account
       return res.json({
         access_token: accessToken,
+        id_token: idToken,
         token_type: "Bearer",
         expires_in: 3600,
         scope: "openid profile email",
         user: {
           sub: codeRecord.userId,
-          name: codeRecord.name,
-          email: codeRecord.email,
-          email_verified: codeRecord.email_verified
+          name: userName,
+          email: userEmail,
+          email_verified: true
         }
       });
     } catch (err: any) {
@@ -689,6 +720,43 @@ The KeyLine Security Team
       return res.status(500).json({ error: "server_error", error_description: err.message });
     }
   };
+
+  // 1c. OAUTH 2.0 USERINFO ENDPOINT
+  const handleUserInfo = async (req: any, res: any) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "invalid_token", error_description: "Missing or invalid Bearer access token." });
+      }
+
+      const token = authHeader.split(" ")[1];
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      
+      const user = await db.users.findFirst((u) => u.id === decoded.userId);
+      if (!user) {
+        return res.status(404).json({ error: "invalid_token", error_description: "Associated user identity check failed." });
+      }
+
+      return res.json({
+        sub: user.id,
+        name: user.name,
+        email: user.email,
+        email_verified: true
+      });
+    } catch (err: any) {
+      console.error("[OAUTH USERINFO EXCEPTION]", err);
+      return res.status(401).json({ error: "invalid_token", error_description: "Token decoding verification failed." });
+    }
+  };
+
+  app.get("/oauth/userinfo", handleUserInfo);
+  app.post("/oauth/userinfo", handleUserInfo);
+  app.get("/userinfo", handleUserInfo);
+  app.post("/userinfo", handleUserInfo);
 
   app.post("/oauth/token", handleTokenExchange);
   app.post("/api/oauth/token", handleTokenExchange);
