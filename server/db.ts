@@ -95,6 +95,17 @@ const initialDb: DatabaseSchema = {
       allowedOrigins: ["https://oidcdebugger.com"],
       createdAt: new Date().toISOString(),
       status: "active",
+    },
+    {
+      id: "demo-app-production-client",
+      userId: "demo-user",
+      name: "Permanent Production Client",
+      clientId: "kl_client_7pgm182dqdo6ewsr",
+      clientSecret: "kl_secret_7pgm182dqdo6ewsr_secret_key",
+      redirectUris: ["https://oidcdebugger.com/redirect"],
+      allowedOrigins: ["https://oidcdebugger.com"],
+      createdAt: new Date().toISOString(),
+      status: "active",
     }
   ],
   databaseRecords: [
@@ -166,6 +177,25 @@ class FileDB {
           name: "OIDC Debugger Client",
           clientId: targetClientId,
           clientSecret: "kl_secret_6o8umibgxh1qsqdi_secret_keys",
+          redirectUris: ["https://oidcdebugger.com/redirect"],
+          allowedOrigins: ["https://oidcdebugger.com"],
+          createdAt: new Date().toISOString(),
+          status: "active",
+        });
+        await this.save(this.cache);
+      }
+
+      // Ensure the hardcoded production client_id is always present
+      const prodClientId = "kl_client_7pgm182dqdo6ewsr";
+      const hasProdApp = this.cache.applications.some((a) => a.clientId === prodClientId);
+      if (!hasProdApp) {
+        console.log(`[DATABASE INIT] Injecting missing production client: ${prodClientId}`);
+        this.cache.applications.push({
+          id: "demo-app-production-client",
+          userId: "demo-user",
+          name: "Permanent Production Client",
+          clientId: prodClientId,
+          clientSecret: "kl_secret_7pgm182dqdo6ewsr_secret_key",
           redirectUris: ["https://oidcdebugger.com/redirect"],
           allowedOrigins: ["https://oidcdebugger.com"],
           createdAt: new Date().toISOString(),
