@@ -64,8 +64,10 @@ const PORT = 3000;
     expiresAt: number; 
   }>();
 
-  // Custom production mail dispatcher for real secure OTP delivery
+  // Custom production mail dispatcher for real secure OTP delivery via Resend or SMTP
   const sendOTPEmail = async (email: string, name: string, otp: string) => {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const resendFrom = process.env.RESEND_FROM || `Keyline Security <onboarding@resend.dev>`;
     const host = process.env.SMTP_HOST;
     const port = parseInt(process.env.SMTP_PORT || "587", 10);
     const user = process.env.SMTP_USER;
@@ -96,7 +98,35 @@ The KeyLine Security Team
       </div>
     `;
 
-    console.log(`[MAIL SERVICE] Configuring secure SMTP client [Host: ${host}, Port: ${port}, User: ${user}, From: ${from}, Pass Configured: ${pass ? "YES" : "NO"}]`);
+    if (resendApiKey) {
+      try {
+        console.log(`[MAIL SERVICE] Dispatching OTP via Resend API to: ${email}`);
+        const response = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            from: resendFrom,
+            to: [email],
+            subject: `🔑 [KeyLine Security Verification] Authorization OTP Code: ${otp}`,
+            text: msgBody,
+            html: msgHtml
+          })
+        });
+
+        if (response.ok) {
+          console.log(`[MAIL SERVICE] Security OTP email delivered successfully via Resend API to ${email}`);
+          return true;
+        } else {
+          const errMsg = await response.text();
+          console.error(`[MAIL ERROR] Resend API failed sending email:`, errMsg);
+        }
+      } catch (err: any) {
+        console.error(`[MAIL ERROR] Resend API exception:`, err.message || err);
+      }
+    }
 
     if (host && user && pass) {
       try {
@@ -109,9 +139,9 @@ The KeyLine Security Team
             user,
             pass,
           },
-          connectionTimeout: 4000, // 4 seconds limit on establishing connection
-          greetingTimeout: 4000,   // 4 seconds limit on SMTP handshake/greeting
-          socketTimeout: 5000,     // 5 seconds limit on idle socket inactivity
+          connectionTimeout: 4000,
+          greetingTimeout: 4000,
+          socketTimeout: 5000,
         });
 
         await transporter.sendMail({
@@ -122,13 +152,13 @@ The KeyLine Security Team
           html: msgHtml,
         });
 
-        console.log(`[MAIL SERVICE] Security OTP email delivered successfully to ${email}`);
+        console.log(`[MAIL SERVICE] Security OTP email delivered successfully via SMTP to ${email}`);
         return true;
       } catch (err: any) {
         console.error(`[MAIL ERROR] Failed sending real email via configured SMTP:`, err.message || err);
       }
     } else {
-      console.warn(`[MAIL WARNING] Demanded SMTP environment credentials are unpopulated (SMTP_HOST, SMTP_USER, or SMTP_PASS). Running in simulated logs-only fallback.`);
+      console.warn(`[MAIL WARNING] Neither Resend API key nor SMTP credentials are fully populated. Running in simulated logs-only fallback.`);
     }
     return false;
   };

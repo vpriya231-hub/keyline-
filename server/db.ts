@@ -1,7 +1,7 @@
-import sqlite3 from "sqlite3";
+import fs from "fs";
 import path from "path";
 
-const DB_FILE = path.join(process.cwd(), "database.sqlite");
+const DB_FILE = path.join(process.cwd(), "database.json");
 
 export interface DatabaseUser {
   id: string;
@@ -58,401 +58,298 @@ export interface DatabaseSession {
   expiresAt: number;
 }
 
-class SQLiteDB {
-  private db: sqlite3.Database;
+interface DatabaseSchema {
+  users: DatabaseUser[];
+  applications: DatabaseApplication[];
+  database_records: SavedDatabaseRecord[];
+  storage_records: SavedStorageRecord[];
+  end_users: KeyLineEndUser[];
+  sessions: DatabaseSession[];
+}
+
+class JsonDB {
+  private data: DatabaseSchema;
 
   constructor() {
-    this.db = new sqlite3.Database(DB_FILE, (err) => {
-      if (err) {
-        console.error("Failed to open SQLite database:", err);
-      } else {
-        console.log("Connected to persistent SQLite database at: " + DB_FILE);
+    this.data = this.load();
+  }
+
+  private load(): DatabaseSchema {
+    try {
+      if (fs.existsSync(DB_FILE)) {
+        const fileContent = fs.readFileSync(DB_FILE, "utf-8");
+        const parsed = JSON.parse(fileContent);
+        return {
+          users: parsed.users || [],
+          applications: parsed.applications || [],
+          database_records: parsed.database_records || [],
+          storage_records: parsed.storage_records || [],
+          end_users: parsed.end_users || [],
+          sessions: parsed.sessions || [],
+        };
       }
-    });
-    this.init();
+    } catch (err) {
+      console.error("[JsonDB] Failed to load data, using defaults:", err);
+    }
+
+    const initialApps: DatabaseApplication[] = [
+      {
+        id: "kl_app_default1",
+        userId: "demo-user",
+        name: "SaaS Analytics Dashboard",
+        clientId: "kl_client_8f9e2d1c",
+        clientSecret: "kl_secret_7a8b9c0d1e2f3g4h5i6j7k8l9m",
+        redirectUris: ["http://localhost:4000/auth/callback"],
+        allowedOrigins: ["http://localhost:4000"],
+        createdAt: new Date().toISOString(),
+        status: "active",
+      },
+      {
+        id: "kl_app_default2",
+        userId: "demo-user",
+        name: "KeyLine Sandbox Mobile App",
+        clientId: "kl_client_a1b2c3d4",
+        clientSecret: "kl_secret_9z8y7x6w5v4u3t2s1r0q9p8o7n",
+        redirectUris: ["keyline-sandbox://callback"],
+        allowedOrigins: [],
+        createdAt: new Date().toISOString(),
+        status: "active",
+      },
+      {
+        id: "kl_app_default3",
+        userId: "demo-user",
+        name: "OIDC Debugger Client",
+        clientId: "kl_client_6o8umibgxh1qsqdi",
+        clientSecret: "kl_secret_6o8umibgxh1qsqdi_secret_keys",
+        redirectUris: ["https://oidcdebugger.com/redirect"],
+        allowedOrigins: ["https://oidcdebugger.com"],
+        createdAt: new Date().toISOString(),
+        status: "active",
+      },
+      {
+        id: "kl_app_default4",
+        userId: "demo-user",
+        name: "Permanent Production Client",
+        clientId: "kl_client_7pgm182dqdo6ewsr",
+        clientSecret: "kl_secret_7pgm182dqdo6ewsr_secret_key",
+        redirectUris: ["https://oidcdebugger.com/redirect"],
+        allowedOrigins: ["https://oidcdebugger.com"],
+        createdAt: new Date().toISOString(),
+        status: "active",
+      }
+    ];
+
+    const defaultData: DatabaseSchema = {
+      users: [],
+      applications: initialApps,
+      database_records: [],
+      storage_records: [],
+      end_users: [],
+      sessions: []
+    };
+
+    this.saveData(defaultData);
+    return defaultData;
   }
 
-  private init() {
-    this.db.serialize(() => {
-      this.db.run(`
-        CREATE TABLE IF NOT EXISTS users (
-          id TEXT PRIMARY KEY,
-          name TEXT,
-          email TEXT UNIQUE,
-          passwordHash TEXT,
-          createdAt TEXT
-        )
-      `);
-
-      this.db.run(`
-        CREATE TABLE IF NOT EXISTS applications (
-          id TEXT PRIMARY KEY,
-          userId TEXT,
-          name TEXT,
-          clientId TEXT UNIQUE,
-          clientSecret TEXT,
-          redirectUris TEXT,
-          allowedOrigins TEXT,
-          createdAt TEXT,
-          status TEXT
-        )
-      `);
-
-      this.db.run(`
-        CREATE TABLE IF NOT EXISTS database_records (
-          id TEXT PRIMARY KEY,
-          clientId TEXT,
-          collection TEXT,
-          data TEXT,
-          createdAt TEXT
-        )
-      `);
-
-      this.db.run(`
-        CREATE TABLE IF NOT EXISTS storage_records (
-          id TEXT PRIMARY KEY,
-          clientId TEXT,
-          filePath TEXT,
-          originalName TEXT,
-          simulatedUrl TEXT,
-          sizeBytes INTEGER,
-          mimeType TEXT,
-          uploadedAt TEXT
-        )
-      `);
-
-      this.db.run(`
-        CREATE TABLE IF NOT EXISTS end_users (
-          id TEXT PRIMARY KEY,
-          clientId TEXT,
-          name TEXT,
-          email TEXT,
-          status TEXT,
-          createdAt TEXT
-        )
-      `);
-
-      this.db.run(`
-        CREATE TABLE IF NOT EXISTS sessions (
-          id TEXT PRIMARY KEY,
-          userId TEXT,
-          createdAt TEXT,
-          expiresAt INTEGER
-        )
-      `);
-
-      // Bootstrap initial clients if empty
-      this.db.get(`SELECT COUNT(*) as count FROM applications`, (err, row: any) => {
-        if (!err && row && row.count === 0) {
-          console.log("[DATABASE INIT] Bootstrapping master developer applications in SQLite...");
-          
-          const defaultApps = [
-            {
-              userId: "demo-user",
-              name: "SaaS Analytics Dashboard",
-              clientId: "kl_client_8f9e2d1c",
-              clientSecret: "kl_secret_7a8b9c0d1e2f3g4h5i6j7k8l9m",
-              redirectUris: ["http://localhost:4000/auth/callback"],
-              allowedOrigins: ["http://localhost:4000"],
-              status: "active",
-            },
-            {
-              userId: "demo-user",
-              name: "KeyLine Sandbox Mobile App",
-              clientId: "kl_client_a1b2c3d4",
-              clientSecret: "kl_secret_9z8y7x6w5v4u3t2s1r0q9p8o7n",
-              redirectUris: ["keyline-sandbox://callback"],
-              allowedOrigins: [],
-              status: "active",
-            },
-            {
-              userId: "demo-user",
-              name: "OIDC Debugger Client",
-              clientId: "kl_client_6o8umibgxh1qsqdi",
-              clientSecret: "kl_secret_6o8umibgxh1qsqdi_secret_keys",
-              redirectUris: ["https://oidcdebugger.com/redirect"],
-              allowedOrigins: ["https://oidcdebugger.com"],
-              status: "active",
-            },
-            {
-              userId: "demo-user",
-              name: "Permanent Production Client",
-              clientId: "kl_client_7pgm182dqdo6ewsr",
-              clientSecret: "kl_secret_7pgm182dqdo6ewsr_secret_key",
-              redirectUris: ["https://oidcdebugger.com/redirect"],
-              allowedOrigins: ["https://oidcdebugger.com"],
-              status: "active",
-            }
-          ];
-
-          for (const app of defaultApps) {
-            const id = "kl_app_" + Math.random().toString(36).substr(2, 9);
-            this.db.run(
-              `INSERT INTO applications (id, userId, name, clientId, clientSecret, redirectUris, allowedOrigins, createdAt, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                id,
-                app.userId,
-                app.name,
-                app.clientId,
-                app.clientSecret,
-                JSON.stringify(app.redirectUris),
-                JSON.stringify(app.allowedOrigins),
-                new Date().toISOString(),
-                app.status
-              ]
-            );
-          }
-        }
-      });
-    });
+  private saveData(data: DatabaseSchema) {
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    } catch (err) {
+      console.error("[JsonDB] Failed to save data:", err);
+    }
   }
 
-  // Promise helpers
-  private run(sql: string, params: any[] = []): Promise<any> {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, function (err) {
-        if (err) reject(err);
-        else resolve({ lastID: this.lastID, changes: this.changes });
-      });
-    });
-  }
-
-  private get(sql: string, params: any[] = []): Promise<any> {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
-  }
-
-  private all(sql: string, params: any[] = []): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows || []);
-      });
-    });
+  private perform<T>(action: (data: DatabaseSchema) => T): T {
+    const currentData = this.load();
+    const result = action(currentData);
+    this.saveData(currentData);
+    this.data = currentData;
+    return result;
   }
 
   // Users Helpers
   public users = {
     findMany: async (): Promise<DatabaseUser[]> => {
-      const rows = await this.all(`SELECT * FROM users`);
-      return rows;
+      return this.load().users;
     },
     findFirst: async (predicate: (u: DatabaseUser) => boolean): Promise<DatabaseUser | null> => {
-      const rows = await this.all(`SELECT * FROM users`);
-      return rows.find(predicate) || null;
+      const list = this.load().users;
+      return list.find(predicate) || null;
     },
     create: async (user: Omit<DatabaseUser, "id" | "createdAt">): Promise<DatabaseUser> => {
-      const newUser: DatabaseUser = {
-        ...user,
-        id: "kl_usr_" + Math.random().toString(36).substr(2, 9),
-        createdAt: new Date().toISOString(),
-      };
-      await this.run(
-        `INSERT INTO users (id, name, email, passwordHash, createdAt) VALUES (?, ?, ?, ?, ?)`,
-        [newUser.id, newUser.name, newUser.email, newUser.passwordHash, newUser.createdAt]
-      );
-      return newUser;
+      return this.perform((data) => {
+        const newUser: DatabaseUser = {
+          ...user,
+          id: "kl_usr_" + Math.random().toString(36).substr(2, 9),
+          createdAt: new Date().toISOString(),
+        };
+        data.users.push(newUser);
+        return newUser;
+      });
     },
     update: async (id: string, updates: Partial<Omit<DatabaseUser, "id" | "createdAt">>): Promise<DatabaseUser | null> => {
-      const row = await this.get(`SELECT * FROM users WHERE id = ?`, [id]);
-      if (!row) return null;
-      const updated = { ...row, ...updates };
-      await this.run(
-        `UPDATE users SET name = ?, email = ?, passwordHash = ? WHERE id = ?`,
-        [updated.name, updated.email, updated.passwordHash, id]
-      );
-      return updated;
+      return this.perform((data) => {
+        const idx = data.users.findIndex((u) => u.id === id);
+        if (idx === -1) return null;
+        const updated = { ...data.users[idx], ...updates };
+        data.users[idx] = updated;
+        return updated;
+      });
     }
   };
 
   // Applications Helpers
   public applications = {
     findMany: async (predicate?: (app: DatabaseApplication) => boolean): Promise<DatabaseApplication[]> => {
-      const rows = await this.all(`SELECT * FROM applications`);
-      const mapped = rows.map((r) => ({
-        ...r,
-        redirectUris: JSON.parse(r.redirectUris || "[]"),
-        allowedOrigins: JSON.parse(r.allowedOrigins || "[]")
-      }));
-      if (predicate) return mapped.filter(predicate);
-      return mapped;
+      const list = this.load().applications;
+      if (predicate) return list.filter(predicate);
+      return list;
     },
     findFirst: async (predicate: (app: DatabaseApplication) => boolean): Promise<DatabaseApplication | null> => {
-      const apps = await this.applications.findMany();
-      return apps.find(predicate) || null;
+      const list = this.load().applications;
+      return list.find(predicate) || null;
     },
     create: async (app: Omit<DatabaseApplication, "id" | "clientId" | "clientSecret" | "createdAt" | "status">): Promise<DatabaseApplication> => {
-      const newApp: DatabaseApplication = {
-        ...app,
-        id: "kl_app_" + Math.random().toString(36).substr(2, 9),
-        clientId: "kl_client_" + Math.random().toString(36).substr(2, 8) + Math.random().toString(36).substr(2, 8),
-        clientSecret: "kl_secret_" + Array.from({ length: 4 }, () => Math.random().toString(36).substr(2)).join("").substring(0, 32),
-        status: "active",
-        createdAt: new Date().toISOString(),
-      };
-      await this.run(
-        `INSERT INTO applications (id, userId, name, clientId, clientSecret, redirectUris, allowedOrigins, createdAt, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          newApp.id,
-          newApp.userId,
-          newApp.name,
-          newApp.clientId,
-          newApp.clientSecret,
-          JSON.stringify(newApp.redirectUris),
-          JSON.stringify(newApp.allowedOrigins),
-          newApp.createdAt,
-          newApp.status
-        ]
-      );
-      return newApp;
+      return this.perform((data) => {
+        const newApp: DatabaseApplication = {
+          ...app,
+          id: "kl_app_" + Math.random().toString(36).substr(2, 9),
+          clientId: "kl_client_" + Math.random().toString(36).substr(2, 8) + Math.random().toString(36).substr(2, 8),
+          clientSecret: "kl_secret_" + Array.from({ length: 4 }, () => Math.random().toString(36).substr(2)).join("").substring(0, 32),
+          status: "active",
+          createdAt: new Date().toISOString(),
+        };
+        data.applications.push(newApp);
+        return newApp;
+      });
     },
     update: async (id: string, updates: Partial<Omit<DatabaseApplication, "id" | "clientId" | "createdAt">>): Promise<DatabaseApplication | null> => {
-      const row = await this.get(`SELECT * FROM applications WHERE id = ?`, [id]);
-      if (!row) return null;
-      const current = {
-        ...row,
-        redirectUris: JSON.parse(row.redirectUris || "[]"),
-        allowedOrigins: JSON.parse(row.allowedOrigins || "[]")
-      };
-      const updated = { ...current, ...updates };
-      await this.run(
-        `UPDATE applications SET name = ?, clientSecret = ?, redirectUris = ?, allowedOrigins = ?, status = ? WHERE id = ?`,
-        [
-          updated.name,
-          updated.clientSecret,
-          JSON.stringify(updated.redirectUris),
-          JSON.stringify(updated.allowedOrigins),
-          updated.status,
-          id
-        ]
-      );
-      return updated;
+      return this.perform((data) => {
+        const idx = data.applications.findIndex((a) => a.id === id);
+        if (idx === -1) return null;
+        const updated = { ...data.applications[idx], ...updates };
+        data.applications[idx] = updated;
+        return updated;
+      });
     },
     delete: async (id: string): Promise<boolean> => {
-      const result = await this.run(`DELETE FROM applications WHERE id = ?`, [id]);
-      return result.changes > 0;
+      return this.perform((data) => {
+        const beforeLen = data.applications.length;
+        data.applications = data.applications.filter((a) => a.id !== id);
+        return data.applications.length < beforeLen;
+      });
     }
   };
 
   // Database Records Helpers
   public databaseRecords = {
     findMany: async (predicate?: (rec: SavedDatabaseRecord) => boolean): Promise<SavedDatabaseRecord[]> => {
-      const rows = await this.all(`SELECT * FROM database_records`);
-      const mapped = rows.map((r) => ({
-        ...r,
-        data: JSON.parse(r.data || "{}")
-      }));
-      if (predicate) return mapped.filter(predicate);
-      return mapped;
+      const list = this.load().database_records;
+      if (predicate) return list.filter(predicate);
+      return list;
     },
     create: async (payload: Omit<SavedDatabaseRecord, "id" | "createdAt">): Promise<SavedDatabaseRecord> => {
-      const newRecord: SavedDatabaseRecord = {
-        ...payload,
-        id: "rec_" + Math.random().toString(36).substr(2, 9),
-        createdAt: new Date().toISOString(),
-      };
-      await this.run(
-        `INSERT INTO database_records (id, clientId, collection, data, createdAt) VALUES (?, ?, ?, ?, ?)`,
-        [newRecord.id, newRecord.clientId, newRecord.collection, JSON.stringify(newRecord.data), newRecord.createdAt]
-      );
-      return newRecord;
+      return this.perform((data) => {
+        const newRecord: SavedDatabaseRecord = {
+          ...payload,
+          id: "rec_" + Math.random().toString(36).substr(2, 9),
+          createdAt: new Date().toISOString(),
+        };
+        data.database_records.push(newRecord);
+        return newRecord;
+      });
     },
     clearAll: async (clientId: string): Promise<void> => {
-      await this.run(`DELETE FROM database_records WHERE clientId = ?`, [clientId]);
+      this.perform((data) => {
+        data.database_records = data.database_records.filter((rec) => rec.clientId !== clientId);
+      });
     }
   };
 
   // Storage Records Helpers
   public storageRecords = {
     findMany: async (predicate?: (rec: SavedStorageRecord) => boolean): Promise<SavedStorageRecord[]> => {
-      const rows = await this.all(`SELECT * FROM storage_records`);
-      if (predicate) return rows.filter(predicate);
-      return rows;
+      const list = this.load().storage_records;
+      if (predicate) return list.filter(predicate);
+      return list;
     },
     create: async (payload: Omit<SavedStorageRecord, "id" | "uploadedAt">): Promise<SavedStorageRecord> => {
-      const newRecord: SavedStorageRecord = {
-        ...payload,
-        id: "file_" + Math.random().toString(36).substr(2, 9),
-        uploadedAt: new Date().toISOString(),
-      };
-      await this.run(
-        `INSERT INTO storage_records (id, clientId, filePath, originalName, simulatedUrl, sizeBytes, mimeType, uploadedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          newRecord.id,
-          newRecord.clientId,
-          newRecord.filePath,
-          newRecord.originalName,
-          newRecord.simulatedUrl,
-          newRecord.sizeBytes,
-          newRecord.mimeType,
-          newRecord.uploadedAt
-        ]
-      );
-      return newRecord;
+      return this.perform((data) => {
+        const newRecord: SavedStorageRecord = {
+          ...payload,
+          id: "file_" + Math.random().toString(36).substr(2, 9),
+          uploadedAt: new Date().toISOString(),
+        };
+        data.storage_records.push(newRecord);
+        return newRecord;
+      });
     },
     clearAll: async (clientId: string): Promise<void> => {
-      await this.run(`DELETE FROM storage_records WHERE clientId = ?`, [clientId]);
+      this.perform((data) => {
+        data.storage_records = data.storage_records.filter((rec) => rec.clientId !== clientId);
+      });
     }
   };
 
   // End Users Helpers
   public endUsers = {
     findMany: async (predicate?: (user: KeyLineEndUser) => boolean): Promise<KeyLineEndUser[]> => {
-      const rows = await this.all(`SELECT * FROM end_users`);
-      if (predicate) return rows.filter(predicate);
-      return rows;
+      const list = this.load().end_users;
+      if (predicate) return list.filter(predicate);
+      return list;
     },
     create: async (payload: Omit<KeyLineEndUser, "id" | "createdAt">): Promise<KeyLineEndUser> => {
-      const newUser: KeyLineEndUser = {
-        ...payload,
-        id: "kl_usr_" + Math.random().toString(36).substr(2, 9),
-        createdAt: new Date().toISOString(),
-      };
-      await this.run(
-        `INSERT INTO end_users (id, clientId, name, email, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
-        [newUser.id, newUser.clientId, newUser.name, newUser.email, newUser.status, newUser.createdAt]
-      );
-      return newUser;
+      return this.perform((data) => {
+        const newUser: KeyLineEndUser = {
+          ...payload,
+          id: "kl_usr_" + Math.random().toString(36).substr(2, 9),
+          createdAt: new Date().toISOString(),
+        };
+        data.end_users.push(newUser);
+        return newUser;
+      });
     },
     delete: async (id: string): Promise<boolean> => {
-      const result = await this.run(`DELETE FROM end_users WHERE id = ?`, [id]);
-      return result.changes > 0;
+      return this.perform((data) => {
+        const beforeLen = data.end_users.length;
+        data.end_users = data.end_users.filter((u) => u.id !== id);
+        return data.end_users.length < beforeLen;
+      });
     },
     clearAll: async (clientId: string): Promise<void> => {
-      await this.run(`DELETE FROM end_users WHERE clientId = ?`, [clientId]);
+      this.perform((data) => {
+        data.end_users = data.end_users.filter((u) => u.clientId !== clientId);
+      });
     }
   };
 
   // Sessions Helpers (Active persistent sessions)
   public sessions = {
     findMany: async (): Promise<DatabaseSession[]> => {
-      const rows = await this.all(`SELECT * FROM sessions`);
-      return rows;
+      return this.load().sessions;
     },
     findFirst: async (predicate: (s: DatabaseSession) => boolean): Promise<DatabaseSession | null> => {
-      const rows = await this.all(`SELECT * FROM sessions`);
-      return rows.find(predicate) || null;
+      return this.load().sessions.find(predicate) || null;
     },
     create: async (session: Omit<DatabaseSession, "createdAt">): Promise<DatabaseSession> => {
-      const newSession: DatabaseSession = {
-        ...session,
-        createdAt: new Date().toISOString()
-      };
-      await this.run(
-        `INSERT INTO sessions (id, userId, createdAt, expiresAt) VALUES (?, ?, ?, ?)`,
-        [newSession.id, newSession.userId, newSession.createdAt, newSession.expiresAt]
-      );
-      return newSession;
+      return this.perform((data) => {
+        const newSession: DatabaseSession = {
+          ...session,
+          createdAt: new Date().toISOString(),
+        };
+        data.sessions.push(newSession);
+        return newSession;
+      });
     },
     delete: async (id: string): Promise<boolean> => {
-      const result = await this.run(`DELETE FROM sessions WHERE id = ?`, [id]);
-      return result.changes > 0;
+      return this.perform((data) => {
+        const beforeLen = data.sessions.length;
+        data.sessions = data.sessions.filter((s) => s.id !== id);
+        return data.sessions.length < beforeLen;
+      });
     }
   };
 }
 
-export const db = new SQLiteDB();
+export const db = new JsonDB();
