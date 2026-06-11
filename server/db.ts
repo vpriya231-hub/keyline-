@@ -82,14 +82,14 @@ class JsonDB {
         
         // Ensure our specific default production client exists dynamically
         const apps = parsed.applications || [];
-        const hasSpecificClient = apps.some((a: any) => a.clientId === "kl_client_362du52wt2rbxygg");
+        const hasSpecificClient = apps.some((a: any) => a.clientId === "kl_client_5o4myzndw3zonrrr");
         if (!hasSpecificClient) {
           apps.push({
             id: "kl_app_specific_prod",
             userId: "demo-user",
             name: "KeyLine Production Client",
-            clientId: "kl_client_362du52wt2rbxygg",
-            clientSecret: "kl_secret_362du52wt2rbxygg_secret_key",
+            clientId: "kl_client_5o4myzndw3zonrrr",
+            clientSecret: "kl_secret_5o4myzndw3zonrrr_secret_key",
             redirectUris: ["https://oidcdebugger.com/redirect", "http://localhost:4000/auth/callback"],
             allowedOrigins: ["https://oidcdebugger.com", "http://localhost:4000"],
             createdAt: new Date().toISOString(),
@@ -117,8 +117,8 @@ class JsonDB {
         id: "kl_app_specific_prod",
         userId: "demo-user",
         name: "KeyLine Production Client",
-        clientId: "kl_client_362du52wt2rbxygg",
-        clientSecret: "kl_secret_362du52wt2rbxygg_secret_key",
+        clientId: "kl_client_5o4myzndw3zonrrr",
+        clientSecret: "kl_secret_5o4myzndw3zonrrr_secret_key",
         redirectUris: ["https://oidcdebugger.com/redirect", "http://localhost:4000/auth/callback"],
         allowedOrigins: ["https://oidcdebugger.com", "http://localhost:4000"],
         createdAt: new Date().toISOString(),

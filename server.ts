@@ -419,8 +419,8 @@ The KeyLine Security Team
         return res.status(400).send(renderOAuthStyle("Error", `<div class="error-box"><strong>invalid_request:</strong> Missing required query parameter: <code>client_id</code></div>`));
       }
 
-      if (client_id !== "kl_client_362du52wt2rbxygg") {
-        return res.status(403).send(renderOAuthStyle("Access Denied", `<div class="error-box"><strong>access_denied:</strong> The authorization system is strictly restricted to route login requests for the designated Client ID: <code>kl_client_362du52wt2rbxygg</code>. Other clients are not processed.</div>`));
+      if (client_id !== "kl_client_5o4myzndw3zonrrr") {
+        return res.status(403).send(renderOAuthStyle("Access Denied", `<div class="error-box"><strong>access_denied:</strong> The authorization system is strictly restricted to route login requests for the designated Client ID: <code>kl_client_5o4myzndw3zonrrr</code>. Other clients are not processed.</div>`));
       }
 
       const appProject = await db.applications.findFirst((a) => a.clientId === client_id);
@@ -534,8 +534,8 @@ The KeyLine Security Team
     try {
       const { client_id, redirect_uri, state, user_id } = req.body;
 
-      if (client_id !== "kl_client_362du52wt2rbxygg") {
-        return res.status(403).send(renderOAuthStyle("Access Denied", `<div class="error-box"><strong>access_denied:</strong> The authorization system is strictly restricted to route login requests for the designated Client ID: <code>kl_client_362du52wt2rbxygg</code>. Other clients are not processed.</div>`));
+      if (client_id !== "kl_client_5o4myzndw3zonrrr") {
+        return res.status(403).send(renderOAuthStyle("Access Denied", `<div class="error-box"><strong>access_denied:</strong> The authorization system is strictly restricted to route login requests for the designated Client ID: <code>kl_client_5o4myzndw3zonrrr</code>. Other clients are not processed.</div>`));
       }
 
       const user = await db.users.findFirst((u) => u.id === user_id);
@@ -593,8 +593,8 @@ The KeyLine Security Team
         return res.status(400).send(renderOAuthStyle("Credentials Mismatch", `<div class="error-box">Missing required client credentials or session fields.</div>`));
       }
 
-      if (client_id !== "kl_client_362du52wt2rbxygg") {
-        return res.status(403).send(renderOAuthStyle("Access Denied", `<div class="error-box"><strong>access_denied:</strong> The authorization system is strictly restricted to route login requests for the designated Client ID: <code>kl_client_362du52wt2rbxygg</code>. Other clients are not processed.</div>`));
+      if (client_id !== "kl_client_5o4myzndw3zonrrr") {
+        return res.status(403).send(renderOAuthStyle("Access Denied", `<div class="error-box"><strong>access_denied:</strong> The authorization system is strictly restricted to route login requests for the designated Client ID: <code>kl_client_5o4myzndw3zonrrr</code>. Other clients are not processed.</div>`));
       }
 
       // Authenticate User in Database dynamically

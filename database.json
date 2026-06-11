@@ -1,0 +1,84 @@
+{
+  "users": [],
+  "applications": [
+    {
+      "id": "kl_app_default1",
+      "userId": "demo-user",
+      "name": "SaaS Analytics Dashboard",
+      "clientId": "kl_client_8f9e2d1c",
+      "clientSecret": "kl_secret_7a8b9c0d1e2f3g4h5i6j7k8l9m",
+      "redirectUris": [
+        "http://localhost:4000/auth/callback"
+      ],
+      "allowedOrigins": [
+        "http://localhost:4000"
+      ],
+      "createdAt": "2026-06-11T14:42:36.818Z",
+      "status": "active"
+    },
+    {
+      "id": "kl_app_default2",
+      "userId": "demo-user",
+      "name": "KeyLine Sandbox Mobile App",
+      "clientId": "kl_client_a1b2c3d4",
+      "clientSecret": "kl_secret_9z8y7x6w5v4u3t2s1r0q9p8o7n",
+      "redirectUris": [
+        "keyline-sandbox://callback"
+      ],
+      "allowedOrigins": [],
+      "createdAt": "2026-06-11T14:42:36.818Z",
+      "status": "active"
+    },
+    {
+      "id": "kl_app_default3",
+      "userId": "demo-user",
+      "name": "OIDC Debugger Client",
+      "clientId": "kl_client_6o8umibgxh1qsqdi",
+      "clientSecret": "kl_secret_6o8umibgxh1qsqdi_secret_keys",
+      "redirectUris": [
+        "https://oidcdebugger.com/redirect"
+      ],
+      "allowedOrigins": [
+        "https://oidcdebugger.com"
+      ],
+      "createdAt": "2026-06-11T14:42:36.818Z",
+      "status": "active"
+    },
+    {
+      "id": "kl_app_default4",
+      "userId": "demo-user",
+      "name": "Permanent Production Client",
+      "clientId": "kl_client_7pgm182dqdo6ewsr",
+      "clientSecret": "kl_secret_7pgm182dqdo6ewsr_secret_key",
+      "redirectUris": [
+        "https://oidcdebugger.com/redirect"
+      ],
+      "allowedOrigins": [
+        "https://oidcdebugger.com"
+      ],
+      "createdAt": "2026-06-11T14:42:36.818Z",
+      "status": "active"
+    },
+    {
+      "id": "kl_app_specific_prod",
+      "userId": "demo-user",
+      "name": "KeyLine Production Client",
+      "clientId": "kl_client_5o4myzndw3zonrrr",
+      "clientSecret": "kl_secret_5o4myzndw3zonrrr_secret_key",
+      "redirectUris": [
+        "https://oidcdebugger.com/redirect",
+        "http://localhost:4000/auth/callback"
+      ],
+      "allowedOrigins": [
+        "https://oidcdebugger.com",
+        "http://localhost:4000"
+      ],
+      "createdAt": "2026-06-11T15:27:38.476Z",
+      "status": "active"
+    }
+  ],
+  "database_records": [],
+  "storage_records": [],
+  "end_users": [],
+  "sessions": []
+}
