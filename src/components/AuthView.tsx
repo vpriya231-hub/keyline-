@@ -48,8 +48,8 @@ export default function AuthView({ mode, onNavigate, onAuthSuccess }: AuthViewPr
   };
 
   const fillDemoCredentials = () => {
-    setName("Vastra Tester");
-    setEmail("vastratester@gmail.com");
+    setName("Sandbox Tester");
+    setEmail("sandbox@keyline.io");
     setPassword("password123");
     setError(null);
   };

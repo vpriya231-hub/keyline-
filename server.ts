@@ -929,15 +929,23 @@ The KeyLine Security Team
   // 4. GET AUTH ME ENDPOINT
   app.get("/api/auth/me", authenticateJWT, async (req: any, res) => {
     try {
-      const user = await db.users.findFirst((u) => u.id === req.userId);
+      let user = await db.users.findFirst((u) => u.id === req.userId);
       if (!user) {
         // Special case: support our preloaded DB demo user for a frictionless sandbox UX
         if (req.userId === "demo-user") {
+          let sboxUser = await db.users.findFirst((u) => u.email === "sandbox@keyline.io");
+          if (!sboxUser) {
+            sboxUser = await db.users.create({
+              name: "Sandbox Tester",
+              email: "sandbox@keyline.io",
+              passwordHash: await bcrypt.hash("password123", 10)
+            });
+          }
           return res.json({
-            id: "demo-user",
-            name: "Vastra Tester",
-            email: "vastratester@gmail.com",
-            createdAt: new Date().toISOString(),
+            id: sboxUser.id,
+            name: sboxUser.name,
+            email: sboxUser.email,
+            createdAt: sboxUser.createdAt,
           });
         }
         return res.status(404).json({ error: "User not found" });
