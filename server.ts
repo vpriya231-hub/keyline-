@@ -621,15 +621,10 @@ The KeyLine Security Team
       console.log(`🔢 EMAIL OTP SECURITY CODE: ${otp}`);
       console.log(`======================================================\n\n`);
 
-      // Display the beautifully themed OTP challenge screen with dynamic on-screen badge
+      // Display the beautifully themed OTP challenge screen
       const otpBodyHtml = `
         <h2>Enter 6-Digit Verification Code</h2>
-        <div style="background-color: rgba(249, 115, 22, 0.08); border: 1px solid rgba(249, 115, 22, 0.3); border-radius: 0.75rem; padding: 1.15rem; margin-bottom: 1.5rem; text-align: center;">
-          <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa; font-weight: 600;">System Verification Passkey</p>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: bold; color: #f97316; letter-spacing: 0.12em;">${otp}</span>
-          <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #71717a; line-height: 1.4;">Emails are dispatched asynchronously, but you can enter this sandbox code right away to bypass any SMTP transit latency.</p>
-        </div>
-        <p class="desc">Please confirm the code below to finalize sign-on for <strong>${user.email}</strong>.</p>
+        <p class="desc" style="margin-bottom: 2rem; text-align: center;">A secure one-time verification code has been dispatched to your email address: <strong>${user.email}</strong>. Please check your inbox and input your code below to continue.</p>
         
         <form action="/oauth/authorize/verify" method="POST">
           <input type="hidden" name="otp_session_id" value="${otpSessionId}">
@@ -673,14 +668,8 @@ The KeyLine Security Team
       if (activeFlow.otp !== otp.trim()) {
         const attemptsHtml = `
           <h2>Enter 6-Digit Verification Code</h2>
-          <div class="error-box"><strong>security_alert:</strong> The security code entered is invalid or mismatched. Please check your inputs.</div>
+          <div class="error-box" style="margin-bottom: 2rem;"><strong>security_alert:</strong> The security code entered is invalid or mismatched. Please check your email inbox and insert the precise code.</div>
           
-          <div style="background-color: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 0.75rem; padding: 1.15rem; margin-bottom: 1.5rem; text-align: center;">
-            <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #ef4444; font-weight: 600;">System Verification Passkey</p>
-            <span style="font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: bold; color: #f97316; letter-spacing: 0.12em;">${activeFlow.otp}</span>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #a1a1aa; line-height: 1.4;">Use this dynamic passcode to authorize instantly.</p>
-          </div>
-
           <form action="/oauth/authorize/verify" method="POST">
             <input type="hidden" name="otp_session_id" value="${otp_session_id}">
             
